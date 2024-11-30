@@ -30,6 +30,11 @@ def convert_to_html(content_json):
     # based on rich text editor convert to HTML
     return content_json
 
+def serialize_doc(doc):
+    """Convert MongoDB document to JSON-serializable dictionary."""
+    doc['_id'] = str(doc['_id'])
+    return doc
+
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -54,6 +59,7 @@ def login():
 def dashboard():
     try:
         contents = list(db.content.find({"page_type": "dashboard"}).sort("order_id"))
+        contents = [serialize_doc(content) for content in contents]
         
         return jsonify({
             "logged_in_as": get_jwt_identity(),
@@ -69,6 +75,9 @@ def summary():
     try:
         contents = list(db.content.find({"page_type": "summary"}).sort("order_id"))
         charts = list(db.charts.find({"page_type": "summary"}).sort("order_id"))
+        
+        contents = [serialize_doc(content) for content in contents]
+        charts = [serialize_doc(chart) for chart in charts]
         
         items = []
         content_idx = 0
@@ -102,6 +111,9 @@ def reports():
     try:
         contents = list(db.content.find({"page_type": "reports"}).sort("order_id"))
         charts = list(db.charts.find({"page_type": "reports"}).sort("order_id"))
+        
+        contents = [serialize_doc(content) for content in contents]
+        charts = [serialize_doc(chart) for chart in charts]
         
         items = []
         content_idx = 0
@@ -139,6 +151,7 @@ def home():
 def get_contents(page_type):
     try:
         contents = list(db.content.find({"page_type": page_type}).sort("order_id"))
+        contents = [serialize_doc(content) for content in contents]
         return jsonify(contents)
     except Exception as e:
         print(f"Database error: {e}")
@@ -149,6 +162,7 @@ def get_contents(page_type):
 def get_charts(page_type):
     try:
         charts = list(db.charts.find({"page_type": page_type}).sort("order_id"))
+        charts = [serialize_doc(chart) for chart in charts]
         return jsonify(charts)
     except Exception as e:
         print(f"Database error: {e}")
