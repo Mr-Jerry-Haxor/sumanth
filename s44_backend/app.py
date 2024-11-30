@@ -15,7 +15,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # Configure CORS
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app)
 
 # JWT Configuration
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key')
