@@ -2,8 +2,8 @@ from flask import Flask, request, jsonify
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, unset_jwt_cookies, get_jwt
 from flask_cors import CORS
 from datetime import datetime, timedelta, timezone
-import mysql.connector
-from mysql.connector import pooling
+from pymongo import MongoClient
+from bson.objectid import ObjectId
 import json
 from dotenv import load_dotenv
 import os
@@ -20,27 +20,13 @@ app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
 jwt = JWTManager(app)
 
-# MySQL Configuration
-db_config = {
-    'pool_name': 'mypool',
-    'pool_size': 5,
-    'host': os.getenv('DB_HOST'),
-    'user': os.getenv('DB_USER'),
-    'password': os.getenv('DB_PASSWORD'),
-    'database': os.getenv('DB_NAME')
-}
-
-# Create connection pool
-connection_pool = mysql.connector.pooling.MySQLConnectionPool(**db_config)
-
-def get_db_connection():
-    return connection_pool.get_connection()
+# MongoDB Configuration
+mongo_client = MongoClient(os.getenv('MONGO_CONNECTION_STRING'))
+db = mongo_client[os.getenv('DB_NAME')]
 
 def convert_to_html(content_json):
-    # print(content_json)
-    # based on rish text editor convert to HTML
+    # based on rich text editor convert to HTML
     return content_json
-
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -49,15 +35,10 @@ def login():
         return jsonify({"msg": "Missing username or password"}), 400
     
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM users WHERE username = %s", (data['username'],))
-        user = cursor.fetchone()
+        user = db.users.find_one({"username": data['username']})
         
         if user:
             hashed_password = hashlib.sha512(data['password'].encode('utf-8')).hexdigest()
-            print(f"Hashed password: {hashed_password}")
-            print(f"Database password: {user['password']}")
             if user['password'] == hashed_password:
                 access_token = create_access_token(identity=user['username'])
                 return jsonify(access_token=access_token)
@@ -65,61 +46,28 @@ def login():
     except Exception as e:
         print(f"Database error: {e}")
         return jsonify({"msg": "Internal server error"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
 
 @app.route('/dashboard', methods=['GET'])
 @jwt_required()
 def dashboard():
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        
-        # Get dashboard content ordered by order_id
-        cursor.execute("""
-            SELECT * FROM content 
-            WHERE page_type = 'dashboard'
-            ORDER BY order_id
-        """)
-        contents = cursor.fetchall()
+        contents = list(db.content.find({"page_type": "dashboard"}).sort("order_id"))
         
         return jsonify({
             "logged_in_as": get_jwt_identity(),
             "contents": contents
         }), 200
-        
     except Exception as e:
         print(f"Database error: {e}")
         return jsonify({"msg": "Internal server error"}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 @app.route('/summary', methods=['GET'])
 @jwt_required()
 def summary():
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        contents = list(db.content.find({"page_type": "summary"}).sort("order_id"))
+        charts = list(db.charts.find({"page_type": "summary"}).sort("order_id"))
         
-        # Get all content and charts for summary page ordered by order_id
-        cursor.execute("""
-            SELECT * FROM content 
-            WHERE page_type = 'summary'
-            ORDER BY order_id
-        """)
-        contents = cursor.fetchall()
-        
-        cursor.execute("""
-            SELECT * FROM charts
-            WHERE page_type = 'summary'
-            ORDER BY order_id
-        """)
-        charts = cursor.fetchall()
-        
-        # Combine content and charts based on order_id
         items = []
         content_idx = 0
         chart_idx = 0
@@ -142,37 +90,17 @@ def summary():
         return jsonify({
             "items": items
         }), 200
-        
     except Exception as e:
         print(f"Database error: {e}")
         return jsonify({"msg": "Internal server error"}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 @app.route('/reports', methods=['GET'])
 @jwt_required()
 def reports():
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        contents = list(db.content.find({"page_type": "reports"}).sort("order_id"))
+        charts = list(db.charts.find({"page_type": "reports"}).sort("order_id"))
         
-        # Get all content and charts for reports page ordered by order_id
-        cursor.execute("""
-            SELECT * FROM content 
-            WHERE page_type = 'reports'
-            ORDER BY order_id
-        """)
-        contents = cursor.fetchall()
-        
-        cursor.execute("""
-            SELECT * FROM charts
-            WHERE page_type = 'reports'
-            ORDER BY order_id
-        """)
-        charts = cursor.fetchall()
-        
-        # Combine content and charts based on order_id
         items = []
         content_idx = 0
         chart_idx = 0
@@ -195,15 +123,10 @@ def reports():
         return jsonify({
             "items": items
         }), 200
-        
     except Exception as e:
         print(f"Database error: {e}")
         return jsonify({"msg": "Internal server error"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-        
-  
+
 @app.route('/')
 def home():
     return jsonify({"msg": "Welcome to G41 Backend!"})
@@ -213,41 +136,21 @@ def home():
 @jwt_required()
 def get_contents(page_type):
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT * FROM content 
-            WHERE page_type = %s 
-            ORDER BY order_id
-        """, (page_type,))
-        contents = cursor.fetchall()
+        contents = list(db.content.find({"page_type": page_type}).sort("order_id"))
         return jsonify(contents)
     except Exception as e:
         print(f"Database error: {e}")
         return jsonify({"msg": "Internal server error"}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 @app.route('/admin/charts/<page_type>', methods=['GET'])
 @jwt_required()
 def get_charts(page_type):
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT * FROM charts 
-            WHERE page_type = %s 
-            ORDER BY order_id
-        """, (page_type,))
-        charts = cursor.fetchall()
+        charts = list(db.charts.find({"page_type": page_type}).sort("order_id"))
         return jsonify(charts)
     except Exception as e:
         print(f"Database error: {e}")
         return jsonify({"msg": "Internal server error"}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 @app.route('/admin/add_content', methods=['POST'])
 @jwt_required()
@@ -261,25 +164,18 @@ def add_content():
         return jsonify({"msg": "Missing required fields"}), 400
     
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
         html_content = convert_to_html(content)
-        cursor.execute("""
-            INSERT INTO content (page_type, content, html_content, order_id) 
-            VALUES (%s, %s, %s, %s)
-        """, (page_type, content, html_content, order_id))
-        
-        conn.commit()
+        db.content.insert_one({
+            "page_type": page_type,
+            "content": content,
+            "html_content": html_content,
+            "order_id": order_id
+        })
         return jsonify({"msg": "Content added successfully"}), 201
     except Exception as e:
-        conn.rollback()
         print(f"Database error: {e}")
         return jsonify({"msg": "Internal server error"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-        
+
 @app.route('/admin/add_chart', methods=['POST'])
 @jwt_required()
 def add_chart():
@@ -293,34 +189,23 @@ def add_chart():
         return jsonify({"msg": "Missing required fields"}), 400
     
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            INSERT INTO charts (page_type, chart_type, chart_data, order_id) 
-            VALUES (%s, %s, %s, %s)
-        """, (page_type, chart_type, json.dumps(chart_data), order_id))
-        
-        conn.commit()
+        db.charts.insert_one({
+            "page_type": page_type,
+            "chart_type": chart_type,
+            "chart_data": json.dumps(chart_data),
+            "order_id": order_id
+        })
         return jsonify({"msg": "Chart added successfully"}), 201
     except Exception as e:
-        conn.rollback()
         print(f"Database error: {e}")
         return jsonify({"msg": "Internal server error"}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
-@app.route('/admin/content/<int:id>', methods=['PUT', 'DELETE'])
+@app.route('/admin/content/<id>', methods=['PUT', 'DELETE'])
 @jwt_required()
 def manage_content(id):
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
         if request.method == 'DELETE':
-            cursor.execute("DELETE FROM content WHERE id = %s", (id,))
-            conn.commit()
+            db.content.delete_one({"_id": ObjectId(id)})
             return jsonify({"msg": "Content deleted successfully"})
             
         data = request.get_json()
@@ -332,32 +217,26 @@ def manage_content(id):
             return jsonify({"msg": "Missing required fields"}), 400
             
         html_content = convert_to_html(content)
-        cursor.execute("""
-            UPDATE content 
-            SET content = %s, html_content = %s, page_type = %s, order_id = %s 
-            WHERE id = %s
-        """, (content, html_content, page_type, order_id, id))
-        
-        conn.commit()
+        db.content.update_one(
+            {"_id": ObjectId(id)},
+            {"$set": {
+                "content": content,
+                "html_content": html_content,
+                "page_type": page_type,
+                "order_id": order_id
+            }}
+        )
         return jsonify({"msg": "Content updated successfully"})
     except Exception as e:
-        conn.rollback()
         print(f"Database error: {e}")
         return jsonify({"msg": "Internal server error"}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
-@app.route('/admin/chart/<int:id>', methods=['PUT', 'DELETE'])
+@app.route('/admin/chart/<id>', methods=['PUT', 'DELETE'])
 @jwt_required()
 def manage_chart(id):
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
         if request.method == 'DELETE':
-            cursor.execute("DELETE FROM charts WHERE id = %s", (id,))
-            conn.commit()
+            db.charts.delete_one({"_id": ObjectId(id)})
             return jsonify({"msg": "Chart deleted successfully"})
             
         data = request.get_json()
@@ -369,89 +248,40 @@ def manage_chart(id):
         if not all([chart_type, chart_data, page_type, order_id]):
             return jsonify({"msg": "Missing required fields"}), 400
             
-        cursor.execute("""
-            UPDATE charts 
-            SET chart_type = %s, chart_data = %s, page_type = %s, order_id = %s 
-            WHERE id = %s
-        """, (chart_type, json.dumps(chart_data), page_type, order_id, id))
-        
-        conn.commit()
+        db.charts.update_one(
+            {"_id": ObjectId(id)},
+            {"$set": {
+                "chart_type": chart_type,
+                "chart_data": json.dumps(chart_data),
+                "page_type": page_type,
+                "order_id": order_id
+            }}
+        )
         return jsonify({"msg": "Chart updated successfully"})
     except Exception as e:
-        conn.rollback()
         print(f"Database error: {e}")
         return jsonify({"msg": "Internal server error"}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 if __name__ == '__main__':
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
     try:
         print(f"Initializing database: {os.getenv('DB_NAME')}")
         
-        # Create database if not exists
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {os.getenv('DB_NAME')}")
-        cursor.execute(f"USE {os.getenv('DB_NAME')}")
-        
-        print("Creating users table...")
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                username VARCHAR(80) UNIQUE NOT NULL,
-                password VARCHAR(257) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        print("Creating content table...")
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS content (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                page_type ENUM('dashboard', 'summary', 'reports') NOT NULL,
-                content TEXT NOT NULL,
-                html_content TEXT NOT NULL,
-                order_id INT NOT NULL,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                UNIQUE KEY unique_page_order (page_type, order_id)
-            )
-        """)
-        
-        print("Creating charts table...")
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS charts (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                page_type ENUM('summary', 'reports') NOT NULL,
-                chart_type VARCHAR(50) NOT NULL,
-                chart_data LONGTEXT NOT NULL,
-                order_id INT NOT NULL,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                UNIQUE KEY unique_page_order (page_type, order_id)
-            )
-        """)
-        
-        conn.commit()
+        print("Creating indexes...")
+        db.users.create_index("username", unique=True)
+        db.content.create_index([("page_type", 1), ("order_id", 1)], unique=True)
+        db.charts.create_index([("page_type", 1), ("order_id", 1)], unique=True)
         
         print("Checking for default user...")
-        cursor.execute("SELECT * FROM users WHERE username = 's44'")
-        if not cursor.fetchone():
-            cursor.execute("INSERT INTO users (username, password) VALUES (%s, %s)", ('s44', 'c08bd0433dd8b6f55b697635b3985506f82ed293c01c9062b93e0e07f423f49da6d847e25205ca88d530435183b859dac47b441ccaf70a66b02e6937d091ee73'))
-            conn.commit()
+        if not db.users.find_one({"username": "s44"}):
+            db.users.insert_one({
+                "username": "s44",
+                "password": "c08bd0433dd8b6f55b697635b3985506f82ed293c01c9062b93e0e07f423f49da6d847e25205ca88d530435183b859dac47b441ccaf70a66b02e6937d091ee73"
+            })
             print("Default user created successfully")
         
         print("Database initialization completed successfully")
             
-    except mysql.connector.Error as err:
-        print(f"MySQL Error: {err}")
-        print(f"Error Code: {err.errno}")
-        print(f"SQLSTATE: {err.sqlstate}")
-        print(f"Message: {err.msg}")
     except Exception as e:
         print(f"General error during database initialization: {e}")
-    finally:
-        cursor.close()
-        conn.close()
         
-    app.run(host="0.0.0.0",port=3000)
+    app.run(host="0.0.0.0", port=3000)
