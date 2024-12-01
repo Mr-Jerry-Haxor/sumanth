@@ -12,14 +12,14 @@ import { NgxEditorModule, Editor, Toolbar } from 'ngx-editor';
 
 
 interface ContentItem {
-  id: number;
+  _id: string;
   page_type: string;
   order_id: number;
   html_content: string;
 }
 
 interface ChartItem {
-  id: number;
+  _id: string;
   page_type: string;
   chart_type: string;
   order_id: number;
@@ -55,7 +55,7 @@ export class AdminComponent implements OnInit {
   contents: ContentItem[] = [];
   charts: ChartItem[] = [];
   editMode: 'content' | 'chart' | false = false;
-  editId: number | null = null;
+  editId: string | null = null;
   pageTypes = ['dashboard', 'summary', 'reports'];
   chartTypes = ['bar', 'line', 'pie'];
   sampleChartData = {
@@ -256,7 +256,7 @@ export class AdminComponent implements OnInit {
     }
   }
 
-  handleDelete(id: number, type: string): void {
+  handleDelete(id: string, type: string): void {
     const token = this.authService.getToken();
     if (!token) {
       this.toastService.error('Not authorized. Please login again.');
@@ -277,7 +277,7 @@ export class AdminComponent implements OnInit {
 
   handleEditContent(item: ContentItem): void {
     this.editMode = 'content';
-    this.editId = item.id;
+    this.editId = item._id;
     this.pageType = item.page_type;
     this.orderId = item.order_id;
     this.editorState = item.html_content;
@@ -285,7 +285,7 @@ export class AdminComponent implements OnInit {
 
   handleEditChart(item: ChartItem): void {
     this.editMode = 'chart';
-    this.editId = item.id;
+    this.editId = item._id;
     this.pageType = item.page_type;
     this.orderId = item.order_id;
     this.chartType = item.chart_type as 'bar' | 'line' | 'pie';

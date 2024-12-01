@@ -18,6 +18,11 @@ import { AuthInterceptor } from './services/auth.interceptor';
 import { ToastrModule } from 'ngx-toastr';
 import { ToastService } from './services/toast.service';
 import { NgxEditorModule } from 'ngx-editor';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { RouterModule } from '@angular/router';
+import { WelcomeComponent } from './components/welcome/welcome.component';
+
+
 
 @NgModule({
   imports: [
@@ -33,7 +38,9 @@ import { NgxEditorModule } from 'ngx-editor';
     NavbarComponent,
     PageNotFoundComponent,
     ToastrModule.forRoot(), // ToastrModule added here
-    NgxEditorModule
+    NgxEditorModule,
+    BrowserAnimationsModule,
+    WelcomeComponent,
   ],
   providers: [
     AuthService,

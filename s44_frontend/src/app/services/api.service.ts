@@ -46,7 +46,7 @@ export class ApiService {
     return this.http.post(`${this.apiUrl}/admin/add_content`, data, { headers });
   }
 
-  updateContent(id: number, data: any): Observable<any> {
+  updateContent(id: string, data: any): Observable<any> {
     const headers = this.getHeaders();
     return this.http.put(`${this.apiUrl}/admin/content/${id}`, data, { headers });
   }
@@ -56,12 +56,12 @@ export class ApiService {
     return this.http.post(`${this.apiUrl}/admin/add_chart`, data, { headers });
   }
 
-  updateChart(id: number, data: any): Observable<any> {
+  updateChart(id: string, data: any): Observable<any> {
     const headers = this.getHeaders();
     return this.http.put(`${this.apiUrl}/admin/chart/${id}`, data, { headers });
   }
 
-  deleteItem(id: number, type: string): Observable<any> {
+  deleteItem(id: string, type: string): Observable<any> {
     const headers = this.getHeaders();
     return this.http.delete(`${this.apiUrl}/admin/${type}/${id}`, { headers });
   }

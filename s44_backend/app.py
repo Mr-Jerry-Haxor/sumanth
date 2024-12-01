@@ -288,10 +288,10 @@ if __name__ == '__main__':
         db.charts.create_index([("page_type", 1), ("order_id", 1)], unique=True)
         
         print("Checking for default user...")
-        if not db.users.find_one({"username": "s44"}):
+        if not db.users.find_one({"username": "sumanth"}):
             db.users.insert_one({
-                "username": "s44",
-                "password": "c08bd0433dd8b6f55b697635b3985506f82ed293c01c9062b93e0e07f423f49da6d847e25205ca88d530435183b859dac47b441ccaf70a66b02e6937d091ee73"
+                "username": "sumanth",
+                "password": "f6a019e1dd70d44aa912a2d0fad691997a2107b42ba738184736cf684a87cc901091265012e46d4abb8d3847dd661e7b9d5ba4c92d334d87cd2e3661cc3092f5"
             })
             print("Default user created successfully")
         
